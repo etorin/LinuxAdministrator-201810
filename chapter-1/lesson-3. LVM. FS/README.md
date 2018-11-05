@@ -1316,3 +1316,27 @@ btrfs subvolume snapshot -r /home /home_BACKUP              # создаем rea
 
 11:18 AM - 3:03 PM
 3:45:21
+
+---
+PS.
+Создал на основе этой машины - коробку
+http://sysadm.pp.ua/linux/sistemy-virtualizacii/vagrant-box-creation.html
+'otuslinux' - текущее имя машины в VB - кстати, была запущена
+```bash
+vagrant package --base 'otuslinux' --output lvm_root8g_varhome_optbtrfs_template
+```
+Добавление коробки в список доступных и проверка
+```bash
+PS E:\Vagrant\sitepoint> vagrant box add lvm_root8g_varhome_optbtrfs_template --name 'centos7-hw3-result'
+==> box: Box file was not detected as metadata. Adding it directly...
+==> box: Adding box 'centos7-hw3-result' (v0) for provider:
+    box: Unpacking necessary files from: file://E:/Vagrant/sitepoint/lvm_root8g_varhome_optbtrfs_template
+    box: Progress: 100% (Rate: 834M/s, Estimated time remaining: --:--:--)
+==> box: Successfully added box 'centos7-hw3-result' (v0) for 'virtualbox'!
+PS E:\Vagrant\sitepoint> .\vagrant_module2_fs_raid_4.log^C
+PS E:\Vagrant\sitepoint> vagrant box list
+centos/7           (virtualbox, 1804.02)
+centos/7           (virtualbox, 1809.01)
+centos7-hw3-result (virtualbox, 0)
+ubuntu/trusty64    (virtualbox, 20181004.0.1)
+```
