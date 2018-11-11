@@ -1,0 +1,157 @@
+﻿Last login: Sun Nov 11 01:15:49 2018 from 192.168.33.1
+[vagrant@bashscripts ~]$ sudo -s
+[root@bashscripts vagrant]# ./locking.sh 5
+Job is already running!
+[root@bashscripts vagrant]# cat access-4560-c8671a.log | sed -n 18,18p >templine 
+[root@bashscripts vagrant]# ./strnum.sh templine access-4560-c8671a.log 
+79.137.51.84
+275
+79.137.51.84
+275
+08
+275
+Nov
+275
+2018:05:19:48
+18
++0300
+18
+GET
+18
+tomcat-cms
+1
+cmd.jsp
+1
+HTTP
+1
+1.1
+1
+The new value is 18
+18
+[root@bashscripts vagrant]# ll
+total 2812
+-rwxrwxr-x. 1 vagrant vagrant    4148 Nov 11  2018 01.sh
+-rw-rw-r--. 1 vagrant vagrant  238459 Nov 11 00:41 access-4560-c8671a.log
+-rw-rw-r--. 1 vagrant vagrant   89285 Nov 10 14:25 error-4560-d75c02.log
+-rw-rw-r--. 1 vagrant vagrant      59 Nov 11  2018 hw5_1.log
+-rw-rw-r--. 1 vagrant vagrant 2313395 Nov 11  2018 hw5.log
+-rwxrwxr-x. 1 vagrant vagrant     383 Nov 11  2018 locking.sh
+-rw-r--r--. 1 root    root       5710 Nov 11 00:56 mail.txt
+-rw-rw-r--. 1 vagrant vagrant    8295 Nov 11  2018 README.md
+-rwxrwxr-x. 1 vagrant vagrant     936 Nov 11  2018 strnum.sh
+-rw-r--r--. 1 root    root     186097 Nov 11 00:56 tempaccfile
+-rw-r--r--. 1 root    root        124 Nov 11 01:45 templine
+[root@bashscripts vagrant]# ./01.sh -f access-4560-c8671a.log -l templine 
+79.137.51.84
+275
+79.137.51.84
+275
+08
+275
+Nov
+275
+2018:05:19:48
+18
++0300
+18
+GET
+18
+tomcat-cms
+1
+cmd.jsp
+1
+HTTP
+1
+1.1
+1
+The new value is 18
+990
+973
+Mail Delivery Status Report will be mailed to <root>.
+    169 34.192.116.178
+    163 193.201.224.225
+     55 79.137.51.84
+     55 79.137.51.84
+     55 79.137.51.84
+     55 79.137.51.84
+     55 79.137.51.84
+     28 89.175.123.170
+     27 193.201.224.225
+     26 109.200.235.226
+Mail Delivery Status Report will be mailed to <root>.
+Mail Delivery Status Report will be mailed to <root>.
+[root@bashscripts vagrant]# awk '{print $1}' access-4560-c8671a.log | uniq -c | sort -k1nr | head
+    169 34.192.116.178
+    163 193.201.224.225
+     55 79.137.51.84
+     55 79.137.51.84
+     55 79.137.51.84
+     55 79.137.51.84
+     55 79.137.51.84
+     28 89.175.123.170
+     27 193.201.224.225
+     26 109.200.235.226
+[root@bashscripts vagrant]# crontab -e
+0 * * * * /home/vagrant/01.sh -f access-4560-c8671a.log -n 2
+crontab: no changes made to crontab
+[root@bashscripts vagrant]# crontab -L
+crontab: invalid option -- 'L'
+crontab: usage error: unrecognized option
+Usage:
+ crontab [options] file
+ crontab [options]
+ crontab -n [hostname]
+
+Options:
+ -u <user>  define user
+ -e         edit user's crontab
+ -l         list user's crontab
+ -r         delete user's crontab
+ -i         prompt before deleting
+ -n <host>  set host in cluster to run users' crontabs
+ -c         get host in cluster to run users' crontabs
+ -s         selinux context
+ -x <mask>  enable debugging
+
+Default operation is replace, per 1003.2
+[root@bashscripts vagrant]# crontab -l
+0 * * * * /home/vagrant/01.sh -f access-4560-c8671a.log -n 2
+[root@bashscripts vagrant]# awk '{print $9}' access-4560-c8671a.log | sort | uniq -c | sort -k1nr
+    410 1.1
+    195 HTTP
+     91 llorix-one-lite
+     69 200
+     23 pc-google-analytics
+     17 03
+     17 2016
+     16 301
+     12 wp-embed.min.js?ver=4.8.7
+     11 19
+     11 llorix-one-companion
+     11 wp-emoji-release.min.js?ver=4.8.7
+     10 25
+     10 28
+      9 02
+      9 30
+      6 26
+      5 01
+      5 05
+      5 07
+      5 1.0
+      5 27
+      5 main.php
+      4 13
+      4 comment-reply.min.js?ver=4.8.7
+      3 11
+      3 12
+      3 17
+      3 page
+      2 09
+      2 14
+      2 173
+      2 31
+      1 2018
+      1 304
+      1 400
+      1 rt=0.324
+      1 wp-db-ajax-made
