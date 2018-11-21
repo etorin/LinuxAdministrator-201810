@@ -1,0 +1,114 @@
+﻿Last login: Tue Nov 13 06:26:42 2018 from 192.168.33.1
+[vagrant@bashscripts ~]$ sudo -s
+[root@bashscripts vagrant]# ll
+total 320
+-rw-rw-r--. 1 vagrant vagrant 301505 Nov 14  2018 hw6
+-rw-rw-r--. 1 vagrant vagrant     59 Nov 14  2018 hw6_task1
+-rwxrwxr-x. 1 vagrant vagrant    229 Nov 14  2018 locking.sh
+-rw-r--r--. 1 root    root      3384 Nov 13 06:26 logofsearchig.log
+-rw-rw-r--. 1 vagrant vagrant    489 Nov 14  2018 lookingfortheword
+-rw-rw-r--. 1 vagrant vagrant   7802 Nov 14  2018 README.md
+[root@bashscripts vagrant]# cat locking.sh 
+#!/bin/bash
+#FILENAME_1=/var/log/audit/audit.log
+#WORD_1=root
+key=1
+
+while [ $key -gt 0 ]
+do
+tail -n100 $FILENAME_1 | grep $WORD_1 | tail -n1 >> /home/vagrant/logofsearchig.log
+for i in {1..30}; do echo -n '!'; sleep 1; done
+done[root@bashscripts vagrant]# > logofsearchig.log
+[root@bashscripts vagrant]# cat /etc/systemd/system/test_unit.service
+[Unit]
+Description=Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/sysconfig/test_unit
+PIDFile=/home/vagrant/service.pid
+ExecStart=/home/vagrant/locking.sh /var/log/audit/audit.log root
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -WINCH ${MAINPID}
+StandardOutput=syslog
+StandardError=syslog
+Restart=always
+
+[Install]
+WantedBy=multi-user.target[root@bashscripts vagrant]# 
+[root@bashscripts vagrant]# cat /etc/sysconfig/test_unit
+FILENAME_1=/var/log/audit/audit.log
+WORD_1="root"
+[root@bashscripts vagrant]# systemctl start test_unit
+[root@bashscripts vagrant]# systemctl status test_unit
+в—Џ test_unit.service - Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig
+   Loaded: loaded (/etc/systemd/system/test_unit.service; disabled; vendor preset: disabled)
+   Active: active (running) since Tue 2018-11-13 06:29:15 UTC; 8s ago
+ Main PID: 8258 (locking.sh)
+   CGroup: /system.slice/test_unit.service
+           в”њв”Ђ8258 /bin/bash /home/vagrant/locking.sh /var/log/audit/audit.log root
+           в””в”Ђ8270 sleep 1
+
+Nov 13 06:29:15 bashscripts systemd[1]: Started Searching for the word from some log file. word and file will be mentioned f...config.
+Nov 13 06:29:15 bashscripts systemd[1]: Starting Searching for the word from some log file. word and file will be mentioned ...nfig...
+Hint: Some lines were ellipsized, use -l to show in full.
+[root@bashscripts vagrant]# tail -f logofsearchig.log 
+type=USER_START msg=audit(1542090453.798:1225): pid=8232 uid=0 auid=1000 ses=12 subj=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023 msg='op=PAM:session_open grantors=pam_keyinit,pam_limits acct="root" exe="/usr/bin/sudo" hostname=? addr=? terminal=/dev/pts/1 res=success'
+type=USER_START msg=audit(1542090453.798:1225): pid=8232 uid=0 auid=1000 ses=12 subj=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023 msg='op=PAM:session_open grantors=pam_keyinit,pam_limits acct="root" exe="/usr/bin/sudo" hostname=? addr=? terminal=/dev/pts/1 res=success'
+^C
+[root@bashscripts vagrant]# tail -f logofsearchig.log 
+type=USER_START msg=audit(1542090453.798:1225): pid=8232 uid=0 auid=1000 ses=12 subj=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023 msg='op=PAM:session_open grantors=pam_keyinit,pam_limits acct="root" exe="/usr/bin/sudo" hostname=? addr=? terminal=/dev/pts/1 res=success'
+type=USER_START msg=audit(1542090453.798:1225): pid=8232 uid=0 auid=1000 ses=12 subj=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023 msg='op=PAM:session_open grantors=pam_keyinit,pam_limits acct="root" exe="/usr/bin/sudo" hostname=? addr=? terminal=/dev/pts/1 res=success'
+type=USER_START msg=audit(1542090453.798:1225): pid=8232 uid=0 auid=1000 ses=12 subj=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023 msg='op=PAM:session_open grantors=pam_keyinit,pam_limits acct="root" exe="/usr/bin/sudo" hostname=? addr=? terminal=/dev/pts/1 res=success'
+^C
+[root@bashscripts vagrant]# systemctl status test_unit
+в—Џ test_unit.service - Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig
+   Loaded: loaded (/etc/systemd/system/test_unit.service; disabled; vendor preset: disabled)
+   Active: active (running) since Tue 2018-11-13 06:29:15 UTC; 1min 4s ago
+ Main PID: 8258 (locking.sh)
+   CGroup: /system.slice/test_unit.service
+           в”њв”Ђ8258 /bin/bash /home/vagrant/locking.sh /var/log/audit/audit.log root
+           в””в”Ђ8336 sleep 1
+
+Nov 13 06:29:15 bashscripts systemd[1]: Started Searching for the word from some log file. word and file will be mentioned f...config.
+Nov 13 06:29:15 bashscripts systemd[1]: Starting Searching for the word from some log file. word and file will be mentioned ...nfig...
+Hint: Some lines were ellipsized, use -l to show in full.
+[root@bashscripts vagrant]# tail -f /var/log/messages
+Nov 13 06:26:42 localhost systemd: Starting Session 11 of user vagrant.
+Nov 13 06:26:56 localhost systemd-logind: Removed session 11.
+Nov 13 06:27:05 localhost systemd: Stopping Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig...
+Nov 13 06:27:05 localhost locking.sh: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Nov 13 06:27:05 localhost systemd: Stopped Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig.
+Nov 13 06:27:11 localhost systemd: Started Session 12 of user vagrant.
+Nov 13 06:27:11 localhost systemd-logind: New session 12 of user vagrant.
+Nov 13 06:27:11 localhost systemd: Starting Session 12 of user vagrant.
+Nov 13 06:29:15 localhost systemd: Started Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig.
+Nov 13 06:29:15 localhost systemd: Starting Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig...
+^C
+[root@bashscripts vagrant]# systemctl stop test_unit    
+[root@bashscripts vagrant]# tail -f /var/log/messages
+Nov 13 06:27:05 localhost locking.sh: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Nov 13 06:27:05 localhost systemd: Stopped Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig.
+Nov 13 06:27:11 localhost systemd: Started Session 12 of user vagrant.
+Nov 13 06:27:11 localhost systemd-logind: New session 12 of user vagrant.
+Nov 13 06:27:11 localhost systemd: Starting Session 12 of user vagrant.
+Nov 13 06:29:15 localhost systemd: Started Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig.
+Nov 13 06:29:15 localhost systemd: Starting Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig...
+Nov 13 06:31:04 localhost systemd: Stopping Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig...
+Nov 13 06:31:04 localhost locking.sh: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Nov 13 06:31:04 localhost systemd: Stopped Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig.
+^C
+[root@bashscripts vagrant]# systemctl start test_unit 
+[root@bashscripts vagrant]# tail -f /var/log/messages
+Nov 13 06:27:11 localhost systemd: Started Session 12 of user vagrant.
+Nov 13 06:27:11 localhost systemd-logind: New session 12 of user vagrant.
+Nov 13 06:27:11 localhost systemd: Starting Session 12 of user vagrant.
+Nov 13 06:29:15 localhost systemd: Started Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig.
+Nov 13 06:29:15 localhost systemd: Starting Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig...
+Nov 13 06:31:04 localhost systemd: Stopping Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig...
+Nov 13 06:31:04 localhost locking.sh: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Nov 13 06:31:04 localhost systemd: Stopped Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig.
+Nov 13 06:31:17 localhost systemd: Started Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig.
+Nov 13 06:31:17 localhost systemd: Starting Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig...
+^C

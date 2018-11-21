@@ -1,0 +1,17 @@
+[Unit]
+Description=Searching for the word from some log file. word and file will be mentioned further in /etc/sysconfig
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/sysconfig/test_unit
+PIDFile=/home/vagrant/service.pid
+ExecStart=/home/vagrant/locking.sh /var/log/audit/audit.log root
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -WINCH ${MAINPID}
+StandardOutput=syslog
+StandardError=syslog
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
