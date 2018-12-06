@@ -1,0 +1,54 @@
+#!/bin/bash
+
+echo "Strat `date +%d-%m-%S`" >> /tmp/file-log-pam
+echo "`date +%d-%m-%S` You are $PAM_USER, lets check you" >> /tmp/file-log-pam
+IFS1="$IFS"; IFS=","; S=`cat /etc/group | grep admin | cut -d: -f4`; user_array=( $S ); IFS="$IFS1"
+
+IFS1="$IFS"; IFS=","; S=`cat /etc/holidays | sed ':a;N;$!ba;s/\n/,/g'`; holliday_arr=( $S ); IFS="$IFS1"
+
+
+for i in ${user_array[@]}
+do
+	echo "`date +%d-%m-%S` [$PAM_USER] try to check user $i" >> /tmp/file-log-pam
+	if [[ "$PAM_USER" = "$i" ]]
+	then
+		echo "`date +%d-%m-%S` [$PAM_USER] you are $i, lets check date" >> /tmp/file-log-pam
+
+				for date in ${holliday_arr[@]}
+				do
+					echo "`date +%d-%m-%S` [$PAM_USER] you are $i, date $date to check" >> /tmp/file-log-pam
+					if [[ $(date +%u) > 5 ]]
+					then
+						echo "`date +%d-%m-%S` [$PAM_USER] Weekend.Gratz" >> /tmp/file-log-pam
+						exit 1
+					elif [[ $(date +%d.%m) = "$date" ]]
+					then
+						echo "`date +%d-%m-%S` [$PAM_USER] Holiday.Gratz" >> /tmp/file-log-pam
+						exit 1
+					else
+						echo "`date +%d-%m-%S` [$PAM_USER] Lets work!" >> /tmp/file-log-pam
+						exit 0
+					fi
+				done
+	elif [[ "$PAM_USER" = "root" ]]
+	then
+			for date in ${holliday_arr[@]}
+			do
+				if [[ $(date +%u) > 5 ]]
+				then
+					echo "`date +%d-%m-%S` [$PAM_USER] Its not good day for work. I'm so sorry..." >> /tmp/file-log-pam
+					exit 0
+				elif [[ $(date +%d.%m) = "$date" ]]
+				then
+					echo "`date +%d-%m-%S` [$PAM_USER] Its worst day for work! " >> /tmp/file-log-pam
+					exit 0
+				else
+					echo "`date +%d-%m-%S` [$PAM_USER] One more working day bro..." >> /tmp/file-log-pam
+					exit 0
+				fi
+			done
+	else
+		echo "`date +%d-%m-%S` [$PAM_USER] You are out of list. Sorry" >> /tmp/file-log-pam		
+fi
+done
+exit 1
