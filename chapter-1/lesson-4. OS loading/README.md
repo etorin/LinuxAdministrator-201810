@@ -237,4 +237,3 @@ lsinitrd -m /boot/initramfs-$(uname -r).img
 ```
 
 ![Loading picture](loading.PNG)
-Format: ![Alt Text](url)
