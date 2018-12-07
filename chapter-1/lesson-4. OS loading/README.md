@@ -187,7 +187,7 @@ grub2-mkconfig -o /boot/grub2/grub.cfg
 
 ### 3. Добавить модуль в initrd
 
-Как по слайдам - не получилось
+Как по слайдам - не получилось(теория)
 Просто скопировал - и ничего не увидел при загрузке (quiet убрал)
 ```bash
 /usr/lib/dracut/modules.d/01test/module-setup.sh
@@ -214,3 +214,27 @@ sleep 10
 ```
 И хоть я и убираю quiet в настройках grub перед загрузкой, все равно после некоторого вывода вижу полоски загрузки centos.
 **Вопрос: Нужно ли мне как то еще активировать добавленный модуль, чтоб увидеть его при загрузке?**
+**Ответ: Да, `mkinitrd -f -v /boot/initramfs-$(uname -r).img $(uname -r)`**
+```
+*** Including module: kernel-modules ***
+...
+```
+---
+
+Возвращясь к заданию.
+Коды скриптов я брал из презентации.
+https://otus.ru/media/4f/4e/04_linux_boot-13763-4f4e12.pdf
+
+Я что-то добавлял в module-setup.sh, а там не должно быть ничего лишнего, или, как минимум, то что написано там - не выводится.
+Кажется мне что я не пересобирал модуль initrd в прошлый раз.
+```bash
+mkinitrd -f -v /boot/initramfs-$(uname -r).img $(uname -r)
+```
+
+Список всех модулей в загрузке.
+```bash
+lsinitrd -m /boot/initramfs-$(uname -r).img
+```
+
+![Loading picture](loading.PNG)
+Format: ![Alt Text](url)
