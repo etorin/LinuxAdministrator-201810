@@ -1,0 +1,86 @@
+# -*- mode: ruby -*-
+# vim: set ft=ruby :
+home = ENV['HOME']
+
+
+MACHINES = {
+  :rpmcreatedandrepo => {
+        :box_name => "centos/7",
+        :box_version => "1804.02",
+        :ip_addr => '192.168.33.14',
+    :disks => {
+        :sata1 => {
+            :dfile => home + '/VMDisks/lvm/sata5.vdi',
+            :size => 10240, # Megabytes
+            :port => 1
+        }
+    }
+  },
+}
+
+Vagrant.configure("2") do |config|
+
+  MACHINES.each do |boxname, boxconfig|
+
+      config.vm.define boxname do |box|
+
+          box.vm.box = boxconfig[:box_name]
+          box.vm.box_version = boxconfig[:box_version]
+
+          box.vm.host_name = boxname.to_s
+
+          #box.vm.network "forwarded_port", guest: 3260, host: 3260+offset
+
+          box.vm.network "private_network", ip: boxconfig[:ip_addr]
+
+          box.vm.provider :virtualbox do |vb|
+                  vb.customize ["modifyvm", :id, "--memory", "200"]
+          vb.customize ["storagectl", :id, "--name", "SATA", "--add", "sata" ]
+          vb.name = boxname.to_s
+
+          boxconfig[:disks].each do |dname, dconf|
+              unless File.exist?(dconf[:dfile])
+                vb.customize ['createhd', '--filename', dconf[:dfile], '--variant', 'Fixed', '--size', dconf[:size]]
+              end
+              vb.customize ['storageattach', :id,  '--storagectl', 'SATA', '--port', dconf[:port], '--device', 0, '--type', 'hdd', '--medium', dconf[:dfile]]
+
+          end
+          end
+      box.vm.provision "shell", inline: <<-SHELL
+        mkdir -p ~root/.ssh
+              cp ~vagrant/.ssh/auth* ~root/.ssh
+        yum makecache
+        yum install -y mdadm  smartmontools  hdparm  gdisk  redhat-lsb-core  wget  rpm-build  yum-utils  gcc  rpmdevtools  make gd-devel  automake  perl-devel  zlib-devel  createrepo  pcre-devel  GeoIP-devel  openssl-devel e2fsprogs lvm2 xfsdump epel-release
+        sed -i '65s/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+        systemctl restart sshd
+        sudo sed -i 's/%wheel\s*ALL=(ALL)\s*ALL/%wheel  ALL=NOPASSWD: ALL/g' /etc/sudoers
+        adduser builder
+        #echo "builder" > passwd builder
+        gpasswd -a builder wheel
+        whoami
+        sudo su - builder # Тут пароль не нужен
+        #rpmdev-setuptree # Не нужна команда
+        whoami
+        wget https://nginx.org/packages/centos/7/SRPMS/nginx-1.14.1-1.el7_4.ngx.src.rpm
+        sudo rpm -i nginx-1.14.1-1.el7_4.ngx.src.rpm
+        sudo wget https://www.openssl.org/source/latest.tar.gz
+        sudo tar -xvf latest.tar.gz
+        sudo yum-builddep rpmbuild/SPECS/nginx.spec
+        sudo sed -i 's/.*--with-debug/    --with-openssl=\/home\/builder\/openssl-1.1.1a/g' /root/rpmbuild/SPECS/nginx.spec
+        sudo rpmbuild -bb rpmbuild/SPECS/nginx.spec
+        sudo yum localinstall -y /root/rpmbuild/RPMS/x86_64/nginx-1.14.1-1.el7_4.ngx.x86_64.rpm
+        sudo systemctl start nginx
+        sudo mkdir /usr/share/nginx/html/repo
+        sudo cp /root/rpmbuild/RPMS/x86_64/nginx-1.14.1-1.el7_4.ngx.x86_64.rpm /usr/share/nginx/html/repo/
+        sudo wget http://www.percona.com/downloads/percona-release/redhat/0.1-6/percona-release-0.1-6.noarch.rpm -O /usr/share/nginx/html/repo/percona-release-0.1-6.noarch.rpm
+        sudo wget http://www.percona.com/downloads/percona-release/redhat/0.1-6/percona-release-0.1-6.noarch.rpm -O /usr/share/nginx/html/repo/percona-release-0.1-6.noarch.rpm
+        sudo createrepo /usr/share/nginx/html/repo/
+        sudo sed -i 's/index  index.html index.htm;/index  index.html index.htm;\n        autoindex on;/' /etc/nginx/conf.d/default.conf
+        sudo nginx -t
+        sudo nginx -s reload
+        sudo curl -a http://localhost/repo/
+      SHELL
+      end
+  end
+end
+
