@@ -1,0 +1,5 @@
+---
+
+ansible_hostname: "hw11nginx"
+server_port: 8080
+server_name: "nginx"

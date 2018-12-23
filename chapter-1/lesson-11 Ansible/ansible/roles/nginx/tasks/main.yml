@@ -1,0 +1,35 @@
+---
+
+
+- name: Install epel
+  yum: 
+    name: epel-release 
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Install nginx
+  yum: 
+    name: nginx 
+    state: installed
+  when: ansible_os_family == "RedHat"
+
+- name: Copy site config
+  template: src=default.conf.j2 dest=/etc/nginx/nginx.conf
+  backup: yes
+  notify: Restart nginx
+
+- name: Copy index.html
+  template: src=index.html.j2 dest=/usr/share/nginx/html/index.html
+  backup: yes
+  notify: Restart nginx
+
+- name: service nginx started
+  service: 
+    name: nginx
+    state: started
+    enabled: yes
+
+- name: enable service nginx
+  systemd:
+    name: nginx
+    enabled: yes

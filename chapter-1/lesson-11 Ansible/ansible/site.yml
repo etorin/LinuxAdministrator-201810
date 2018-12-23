@@ -1,0 +1,8 @@
+---
+
+- name: Config nginx
+  hosts: nginx-server
+  become: yes
+  gather_facts: true
+  roles:
+    - nginx
