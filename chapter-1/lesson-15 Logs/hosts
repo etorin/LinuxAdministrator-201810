@@ -1,0 +1,5 @@
+[nginx-server]
+webhost1 ansible_connection=local
+
+[loghost-server]
+loghost1 ansible_connection=local

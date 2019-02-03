@@ -1,0 +1,26 @@
+# Nginx files to syslog server
+
+$ModLoad imfile
+
+$InputFileName /var/log/nginx/error.log
+$InputFileTag nginx_error:
+$InputFileStateFile stat-nginx-error
+$InputFileSeverity error
+$InputFileFacility local1
+$InputFilePollInterval 1
+$InputRunFileMonitor
+
+# access log
+$InputFileName /var/log/nginx/access.log
+$InputFileTag nginx_access:
+$InputFileStateFile stat-nginx-access
+$InputFileSeverity notice
+$InputFileFacility local2
+$InputFilePollInterval 1
+$InputRunFileMonitor
+
+$template error, "192.168.33.12 error %msg%"
+$template access, "192.168.33.12 access %msg%"
+
+local1.* @192.168.33.13;error
+local2.* @192.168.33.13;access

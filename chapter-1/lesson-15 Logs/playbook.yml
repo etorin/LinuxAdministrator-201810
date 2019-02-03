@@ -1,0 +1,89 @@
+---
+
+- hosts: webhost1
+  become: yes
+  user: vagrant
+  vars:
+    ansible_hostname: "webhost1"
+    server_port: 8080
+    server_name: "nginx"
+
+  tasks:
+#    - name: yum update
+#      yum: name=* state=latest
+
+    - name: Install epel
+      yum: 
+        name: epel-release 
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Install nginx
+      yum: 
+        name: nginx 
+        state: installed
+      when: ansible_os_family == "RedHat"
+
+    - name: Copy index.html
+      template: 
+        src: /home/vagrant/index.html.j2 
+        dest: /usr/share/nginx/html/index.html
+      notify: Restart nginx
+
+    - name: Copy site config
+      template: 
+        src: /home/vagrant/default.conf.j2 
+        dest: /etc/nginx/nginx.conf
+      notify: Restart nginx
+    
+    - name: service nginx started
+      service: 
+        name: nginx
+        state: started
+        enabled: yes
+    
+    - name: enable service nginx
+      systemd:
+        name: nginx
+        enabled: yes
+
+    - name: Copy rsyslog config
+      template: 
+        src: /home/vagrant/files-log-nginx.conf.j2
+        dest: /etc/rsyslog.d/files-log-nginx.conf
+      notify: Restart rsyslog
+
+    - name: Copy rsyslog config
+      template: 
+        src: /home/vagrant/rsyslog.conf.j2
+        dest: /etc/rsyslog.conf
+      notify: Restart rsyslog
+
+    - name: Copy audit config
+      template: 
+        src: /home/vagrant/audisp-plugins.d-syslog.conf.j2
+        dest: /etc/audisp/plugins.d/syslog.conf
+      notify: Restart audit
+
+    - name: Change audit config
+      lineinfile: 
+        dest: /etc/audit/auditd.conf
+        regexp: '^write_logs'
+        line: 'write_logs = no'
+      notify: Restart audit
+      
+  handlers:
+    - name: Restart audit
+      command: /sbin/service auditd restart
+
+    - name: Restart nginx
+      service:
+        name: nginx
+        state: restarted
+        enabled: yes
+
+    - name: Restart rsyslog
+      service:
+        name: rsyslog
+        state: restarted
+        enabled: yes

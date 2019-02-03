@@ -1,0 +1,21 @@
+---
+
+- hosts: loghost1
+  become: yes
+  user: vagrant
+  vars:
+    ansible_hostname: "loghost1"
+
+  tasks:
+    - name: Copy rsyslog config
+      template: 
+        src: /home/vagrant/rsyslog.loghost.conf.j2
+        dest: /etc/rsyslog.conf
+      notify: Restart rsyslog
+
+  handlers:
+    - name: Restart rsyslog
+      service:
+        name: rsyslog
+        state: restarted
+        enabled: yes

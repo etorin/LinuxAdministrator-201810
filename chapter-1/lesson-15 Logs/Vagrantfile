@@ -1,0 +1,112 @@
+# -*- mode: ruby -*-
+# vim: set ft=ruby :
+home = ENV['HOME']
+
+
+MACHINES = {
+  :webhost1 => {
+        :box_name => "centos/7",
+        :box_version => "1811.02",
+        :ip_addr => '192.168.33.12',
+    :disks => {
+        :sata1 => {
+            :dfile => home + '/VMDisks/lvm/sata3.vdi',
+            :size => 10240, # Megabytes
+            :port => 1
+        }
+    }
+  },
+  :loghost1 => {
+        :box_name => "centos/7",
+        :box_version => "1804.02",
+        :ip_addr => '192.168.33.13',
+    :disks => {
+        :sata1 => {
+            :dfile => home + '/VMDisks/lvm/sata2.vdi',
+            :size => 10240, # Megabytes
+            :port => 1
+        }
+    }
+  }
+}
+#################### Цикл с оющими настройками
+Vagrant.configure("2") do |config|
+
+  MACHINES.each do |boxname, boxconfig|
+
+      config.vm.define boxname do |box|
+
+          box.vm.box = boxconfig[:box_name]
+          box.vm.box_version = boxconfig[:box_version]
+
+          box.vm.host_name = boxname.to_s
+
+          #box.vm.network "forwarded_port", guest: 3260, host: 3260+offset
+
+          box.vm.network "private_network", ip: boxconfig[:ip_addr]
+
+          box.vm.provider :virtualbox do |vb|
+                  vb.customize ["modifyvm", :id, "--memory", "200"]
+          vb.customize ["storagectl", :id, "--name", "SATA", "--add", "sata" ]
+          vb.name = boxname.to_s
+
+          boxconfig[:disks].each do |dname, dconf|
+              unless File.exist?(dconf[:dfile])
+                vb.customize ['createhd', '--filename', dconf[:dfile], '--variant', 'Fixed', '--size', dconf[:size]]
+              end
+              vb.customize ['storageattach', :id,  '--storagectl', 'SATA', '--port', dconf[:port], '--device', 0, '--type', 'hdd', '--medium', dconf[:dfile]]
+
+          end
+          end
+#################### Ветвление по именам
+      case boxname.to_s
+      when "webhost1"
+      box.vm.provision "shell", inline: <<-SHELL
+        mkdir -p ~root/.ssh
+              cp ~vagrant/.ssh/auth* ~root/.ssh
+        yum makecache
+        yum install -y epel-release
+        yum install -y wget
+        sed -i '65s/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+        systemctl restart sshd
+        yum install -y sshpass
+        yum install -y net-tools
+      SHELL
+
+      #box.vm.provision "file", source: "ansible", destination: "/home/vagrant/ansible"
+      box.vm.provision "file", source: "default.conf.j2", destination: "/home/vagrant/default.conf.j2"
+      box.vm.provision "file", source: "index.html.j2", destination: "/home/vagrant/index.html.j2"
+      box.vm.provision "file", source: "rsyslog.conf.j2", destination: "/home/vagrant/rsyslog.conf.j2"
+      box.vm.provision "file", source: "files-log-nginx.conf.j2", destination: "/home/vagrant/files-log-nginx.conf.j2"
+      box.vm.provision "file", source: "audisp-plugins.d-syslog.conf.j2", destination: "/home/vagrant/audisp-plugins.d-syslog.conf.j2"
+
+      box.vm.provision :ansible_local do |guest_ansible|
+        guest_ansible.inventory_path = "hosts"
+        guest_ansible.playbook = "playbook.yml"
+        guest_ansible.sudo = true
+      end
+
+      when "loghost1"
+      box.vm.provision "shell", inline: <<-SHELL
+        mkdir -p ~root/.ssh
+              cp ~vagrant/.ssh/auth* ~root/.ssh
+        yum makecache
+        yum install -y epel-release
+        yum install -y wget
+        sed -i '65s/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+        systemctl restart sshd
+        yum install -y sshpass
+        yum install -y net-tools
+      SHELL
+
+      box.vm.provision "file", source: "rsyslog.loghost.conf.j2", destination: "/home/vagrant/rsyslog.loghost.conf.j2"
+
+      box.vm.provision :ansible_local do |guest_ansible|
+        guest_ansible.inventory_path = "hosts"
+        guest_ansible.playbook = "playbook-loghost1.yml"
+        guest_ansible.sudo = true
+      end
+  end
+end
+end
+end
