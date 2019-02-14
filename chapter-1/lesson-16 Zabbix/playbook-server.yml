@@ -1,0 +1,311 @@
+---
+
+- hosts: zabbix-server
+  become: yes
+  user: vagrant
+  vars:
+    ansible_hostname: "zabbix-server"
+    mysql_root_password: passwd12345
+
+  tasks:
+    - name: Install epel
+      yum: 
+        name: epel-release 
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Adding Zabbix repository
+      yum_repository:
+        name: zabbix
+        description: zabbix YUM repo
+        baseurl: https://repo.zabbix.com/zabbix/4.0/rhel/7/x86_64/
+        gpgcheck: yes
+        gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-ZABBIX-A14FE591
+        enabled: yes
+      when: ansible_os_family == "RedHat"
+
+    - name: Adding Zabbix non-supported repository
+      yum_repository:
+        name: zabbix-nosupp
+        description: zabbix-nosupp YUM repo
+        baseurl: http://repo.zabbix.com/non-supported/rhel/7/x86_64/
+        gpgcheck: yes
+        gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-ZABBIX
+        enabled: yes
+      when: ansible_os_family == "RedHat"
+
+    - name: Copy /etc/pki/rpm-gpg/RPM-GPG-KEY-ZABBIX
+      template: 
+        src: /home/vagrant/RPM-GPG-KEY-ZABBIX.j2
+        dest: /etc/pki/rpm-gpg/RPM-GPG-KEY-ZABBIX
+      when: ansible_os_family == "RedHat"
+
+    - name: Copy /etc/pki/rpm-gpg/RPM-GPG-KEY-ZABBIX-A14FE591
+      template: 
+        src: /home/vagrant/RPM-GPG-KEY-ZABBIX-A14FE591.j2
+        dest: /etc/pki/rpm-gpg/RPM-GPG-KEY-ZABBIX-A14FE591
+      when: ansible_os_family == "RedHat"
+
+    - name: Install MYSQL
+      yum:
+        name: mariadb-server
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Install the Python MySQL Support Libraries
+      yum: pkg=MySQL-python state=latest
+      when: ansible_os_family == "RedHat"
+
+    - name: Start mysql server and enable it on reboot
+      service: name=mariadb state=started enabled=true
+      when: ansible_os_family == "RedHat"
+
+    - name: Server installation
+      yum: 
+        name: zabbix-server-mysql
+        state: installed
+      when: ansible_os_family == "RedHat"
+
+#     - name: Frontend installation prerequisites
+#       shell: yum-config-manager --enable rhel-7-server-optional-rpms
+
+    - name: Frontend installation
+      yum: 
+        name: zabbix-web-mysql
+        state: installed
+      when: ansible_os_family == "RedHat"
+
+    - name: Copy the root credentials as .my.cnf file
+      template: src=my.cnf.j2 dest=~/.my.cnf mode=0600
+      when: ansible_os_family == "RedHat"
+
+    - name: Create a new database for Zabbix with name 'zabbix'
+      mysql_db:
+        name: zabbix
+        config_file: ~/.my.cnf
+        #login_user: root 
+        #login_password: "{{ mysql_root_password }}"
+        encoding: utf8
+        collation: utf8_bin
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Give rights user for database Zabbix
+      mysql_user:
+        name: zabbix
+        password: "{{ mysql_root_password }}"
+        #host_all: yes
+        priv: 'zabbix.*:ALL,GRANT'
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Install unzip & tar
+      yum:
+        name: unzip, tar
+        state: present
+
+    - name: Check that the /usr/share/doc/zabbix-server-mysql-4.0.4/create.sql.gz exists
+      stat:
+        path: /usr/share/doc/zabbix-server-mysql-4.0.4/create.sql.gz
+      register: stat_result
+
+    #- name: Extract /usr/share/doc/zabbix-server-mysql-4.0.4/create.sql.gz into /usr/share/doc/zabbix-server-mysql-4.0.4/
+    #  unarchive:
+    #    src: /usr/share/doc/zabbix-server-mysql-4.0.4/create.sql.gz
+    #    dest: /usr/share/doc/zabbix-server-mysql-4.0.4/
+    #    remote_src: yes
+    #  when: 
+    #    - ansible_os_family == "RedHat"
+    #    - stat_result.stat.exists == True
+
+    - name: Check that the /usr/share/doc/zabbix-server-mysql-4.0.4/create.sql exists
+      stat:
+        path: /usr/share/doc/zabbix-server-mysql-4.0.4/create.sql
+      register: stat_result
+
+    - name: Extract /usr/share/doc/zabbix-server-mysql-4.0.4/create.sql.gz by shell command
+      shell: gunzip /usr/share/doc/zabbix-server-mysql-4.0.4/create.sql.gz
+
+    - name: Import file.sql similar to mysql -u <username> -p <password> < hostname.sql
+      mysql_db:
+        state: import
+        name: zabbix
+        target: /usr/share/doc/zabbix-server-mysql-4.0.4/create.sql
+      when: ansible_os_family == "RedHat"
+
+    - name: Configure database for Zabbix server - user and host
+      lineinfile: 
+        dest: /etc/zabbix/zabbix_server.conf
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      with_items:
+        - { regexp: '^DBHost=', line: 'DBHost=localhost' }
+        - { regexp: '^DBName=', line: 'DBName=zabbix' }
+        - { regexp: '^DBUser=', line: 'DBUser=zabbix' }
+#        - { regexp: '^DBPassword=', line: 'DBPassword=' }
+      when: ansible_os_family == "RedHat"
+
+    - name: Configure database for Zabbix server - pass
+      lineinfile: 
+        dest: /etc/zabbix/zabbix_server.conf
+        regexp: '^DBPassword='
+        line: 'DBPassword={{ mysql_root_password }}'
+      when: ansible_os_family == "RedHat"
+
+    - name: Copy /home/vagrant/zabbix.conf.php
+      template: 
+        src: /home/vagrant/zabbix.conf.php.j2
+        dest: /etc/zabbix/web/zabbix.conf.php
+        owner: apache
+        group: apache
+        mode: 0640
+      when: ansible_os_family == "RedHat"
+
+    - name: Standart selinux zabbix-policy on
+      shell: "{{ item }}"
+      with_items:
+        - setsebool -P zabbix_run_sudo on
+        - setsebool -P zabbix_can_network on
+
+    - name: Check first policy was enabled
+      shell: if [ $(getsebool -a | grep 'zabbix_run_sudo --> on'| wc -l) -eq 0 ]; then error; fi
+      register: zabbix_run_sudo
+      ignore_errors: True
+      changed_when: False
+
+    - name: Check second policy was enabled
+      shell: if [ $(getsebool -a | grep 'zabbix_can_network --> on'| wc -l) -eq 0 ]; then error; fi
+      register: zabbix_can_network
+      ignore_errors: True
+      changed_when: False
+
+    - name: Notice! Selinux zabbix-policy was enabled
+      debug:
+        msg: "Selinux zabbix-policy was enabled"
+      when:
+        - zabbix_can_network is succeeded
+        - zabbix_run_sudo is succeeded
+
+    - name: Addition tools installation
+      yum: 
+        name: policycoreutils-python
+        state: installed
+      when: ansible_os_family == "RedHat"
+
+    - name: Download zabbix_server_add.te
+      get_url:
+        url: https://support.zabbix.com/secure/attachment/53320/zabbix_server_add.te
+        dest: /home/vagrant/zabbix_server_add.te
+
+    - name: Add selinux zabbix-policy
+      shell: "{{ item }}"
+      with_items:
+        - checkmodule -M -m -o /home/vagrant/zabbix_server_add.mod /home/vagrant/zabbix_server_add.te
+        - semodule_package -m /home/vagrant/zabbix_server_add.mod -o /home/vagrant/zabbix_server_add.pp
+        - semodule -i /home/vagrant/zabbix_server_add.pp
+      register: zabbix_selinux
+
+    - name: Start zabbix server and enable it on reboot
+      service: 
+        name: zabbix-server 
+        state: started 
+        enabled: true
+      when: 
+        - ansible_os_family == "RedHat"
+        - zabbix_can_network is succeeded
+        - zabbix_run_sudo is succeeded
+        - zabbix_selinux is succeeded
+
+    - name: Configure httpd zabbix.conf - timezone
+      lineinfile: 
+        dest: /etc/httpd/conf.d/zabbix.conf
+        regexp: '^php_value date.timezone'
+        line: 'php_value date.timezone Europe/Moscow'
+      when: ansible_os_family == "RedHat"
+
+    - name: Enable selinux zabbix-web policy
+      shell: "{{ item }}"
+      with_items:
+        - setsebool -P httpd_can_connect_zabbix on
+        - setsebool -P httpd_can_network_connect_db on
+
+    - name: Check first policy was enabled
+      shell: if [ $(getsebool -a | grep 'httpd_can_connect_zabbix --> on'| wc -l) -eq 0 ]; then error; fi
+      register: httpd_can_connect_zabbix
+      ignore_errors: True
+      changed_when: False
+
+    - name: Check second policy was enabled
+      shell: if [ $(getsebool -a | grep 'httpd_can_network_connect_db --> on'| wc -l) -eq 0 ]; then error; fi
+      register: httpd_can_network_connect_db
+      ignore_errors: True
+      changed_when: False
+
+    - name: Notice! Selinux zabbix-policy was enabled
+      debug:
+        msg: "Selinux zabbix-policy was enabled"
+      when:
+        - httpd_can_connect_zabbix is succeeded
+        - httpd_can_network_connect_db is succeeded
+
+    - name: Start httpd server and enable it on reboot
+      service: 
+        name: httpd 
+        state: started 
+        enabled: true
+      when: 
+        - ansible_os_family == "RedHat"
+        - httpd_can_connect_zabbix is succeeded
+        - httpd_can_network_connect_db is succeeded
+# 
+#    - name: service nginx started
+#      service: 
+#        name: nginx
+#        state: started
+#        enabled: yes
+#    
+#    - name: enable service nginx
+#      systemd:
+#        name: nginx
+#        enabled: yes
+#
+#    - name: Copy rsyslog config
+#      template: 
+#        src: /home/vagrant/files-log-nginx.conf.j2
+#        dest: /etc/rsyslog.d/files-log-nginx.conf
+#      notify: Restart rsyslog
+#
+#    - name: Copy rsyslog config
+#      template: 
+#        src: /home/vagrant/rsyslog.conf.j2
+#        dest: /etc/rsyslog.conf
+#      notify: Restart rsyslog
+#
+#    - name: Copy audit config
+#      template: 
+#        src: /home/vagrant/audisp-plugins.d-syslog.conf.j2
+#        dest: /etc/audisp/plugins.d/syslog.conf
+#      notify: Restart audit
+#
+#    - name: Change audit config
+#      lineinfile: 
+#        dest: /etc/audit/auditd.conf
+#        regexp: '^write_logs'
+#        line: 'write_logs = no'
+#      notify: Restart audit
+#      
+#  handlers:
+#    - name: Restart audit
+#      command: /sbin/service auditd restart
+#
+#    - name: Restart nginx
+#      service:
+#        name: nginx
+#        state: restarted
+#        enabled: yes
+#
+#    - name: Restart rsyslog
+#      service:
+#        name: rsyslog
+#        state: restarted
+#        enabled: yes

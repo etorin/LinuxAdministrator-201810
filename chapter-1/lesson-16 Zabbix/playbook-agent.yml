@@ -1,0 +1,228 @@
+---
+
+- hosts: zabbix-agent
+  become: yes
+  user: vagrant
+  vars:
+    ansible_hostname: zabbix-agent
+    zabbix_server_add: 192.168.33.12
+    agent_ip: 192.168.33.13 # Можно из фактов текущего узла взять, но я не помню путь
+    listen_port: 10050
+    zabbix_server_url: http://192.168.33.12/zabbix
+    auth_username: Admin
+    auth_password: zabbix
+    list_of_zabbix_groups:
+      - Linux servers
+    zabbix_templates:
+      - Template OS Linux
+    #zabbix_proxy_server:
+    #local_host_to_delegaion:
+
+  tasks:
+    - name: Install epel
+      yum: 
+        name: epel-release 
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Adding Zabbix repository
+      yum_repository:
+        name: zabbix
+        description: zabbix YUM repo
+        baseurl: https://repo.zabbix.com/zabbix/4.0/rhel/7/x86_64/
+        gpgcheck: yes
+        gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-ZABBIX-A14FE591
+        enabled: yes
+      when: ansible_os_family == "RedHat"
+
+    - name: Adding Zabbix non-supported repository
+      yum_repository:
+        name: zabbix-nosupp
+        description: zabbix-nosupp YUM repo
+        baseurl: http://repo.zabbix.com/non-supported/rhel/7/x86_64/
+        gpgcheck: yes
+        gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-ZABBIX
+        enabled: yes
+      when: ansible_os_family == "RedHat"
+
+    - name: Copy /etc/pki/rpm-gpg/RPM-GPG-KEY-ZABBIX
+      template: 
+        src: /home/vagrant/RPM-GPG-KEY-ZABBIX.j2
+        dest: /etc/pki/rpm-gpg/RPM-GPG-KEY-ZABBIX
+      when: ansible_os_family == "RedHat"
+
+    - name: Copy /etc/pki/rpm-gpg/RPM-GPG-KEY-ZABBIX-A14FE591
+      template: 
+        src: /home/vagrant/RPM-GPG-KEY-ZABBIX-A14FE591.j2
+        dest: /etc/pki/rpm-gpg/RPM-GPG-KEY-ZABBIX-A14FE591
+      when: ansible_os_family == "RedHat"
+
+    - name: Check status of firewalld service
+      shell: if [ $(systemctl status firewalld | grep running| wc -l) -eq 0 ]; then error; fi
+      register: firewalld_status
+      ignore_errors: True
+      changed_when: False
+    
+    - name: Check status of iptables service
+      shell: if [ $(systemctl status iptables | grep running| wc -l) -eq 0 ]; then error; fi
+      register: iptables_service_status
+      ignore_errors: True
+      changed_when: False
+    
+    - name: Check status of zabbix-agent service
+      shell: if [ $(systemctl status zabbix-agent | grep running| wc -l) -eq 0 ]; then error; fi
+      register: zabbix_agent_service_status
+      ignore_errors: True
+      changed_when: False
+    
+    - name: Notice! Zabbix agent was not installed
+      debug:
+        msg: "Zabbix agent was NOT installed"
+      when:
+        - zabbix_agent_service_status is failed
+    
+    - name: Notice! Zabbix agent was already installed
+      debug:
+        msg: "Zabbix agent was already installed"
+      when:
+        - zabbix_agent_service_status is succeeded
+
+    - name: Agent installation
+      yum: 
+        name: zabbix-agent
+        state: installed
+      when:
+        - ansible_os_family == "RedHat"
+        - zabbix_agent_service_status is failed
+#        - zabbix_agent_version == "4.0.1"
+
+    - name: Push CLIENT configuration file /etc/zabbix/zabbix_agentd.conf
+      template: src='/home/vagrant/zabbix_agentd.conf.j2' dest='/etc/zabbix/zabbix_agentd.conf' mode=0644 owner=zabbix group=zabbix
+      when:
+        - zabbix_agent_service_status is failed
+      notify: reload zabbix-agent
+
+    - name: Enable zabbix-agent service
+      action: service name=zabbix-agent state=started enabled=yes
+      when:
+        - zabbix_agent_service_status is failed
+
+    - name: Check status of zabbix-agent service AGAUIN !!!
+      shell: if [ $(systemctl status zabbix-agent | grep running| wc -l) -eq 0 ]; then error; fi
+      register: zabbix_agent_service_status
+      ignore_errors: True
+      changed_when: False
+    
+    - name: Check of firewalld service zabbix-agent, IF ignored - there are service zabbix-agent
+      shell: if [ $(firewall-cmd --get-services | grep zabbix-agent| wc -l) -ne 0 ]; then error; fi
+      register: result
+      ignore_errors: True
+      changed_when: False
+      when:
+        - firewalld_status is succeeded
+        - iptables_service_status is failed
+    
+    - name: Create new service zabbix-agent - skiped IF already exist(1)
+      command: firewall-cmd --permanent --new-service=zabbix-agent
+      when:
+        - result is succeeded
+        - firewalld_status is succeeded
+        - iptables_service_status is failed
+    
+    - name: Create new service zabbix-agent - skiped IF already exist(2)
+      command: firewall-cmd --service=zabbix-agent --add-port={{ listen_port }}/tcp --permanent
+      when:
+        - result is succeeded
+        - firewalld_status is succeeded
+        - iptables_service_status is failed
+    
+    - name: Create new service zabbix-agent - skiped IF already exist(3)
+      command: firewall-cmd --reload
+      when:
+        - result is succeeded
+        - firewalld_status is succeeded
+        - iptables_service_status is failed
+    
+    - name: Check if some zone active, IF ignored - there is no firewalld
+      shell: if [ $(firewall-cmd --get-active-zone | head -n1| wc -l) -ne 1 ]; then error; fi
+      register: zone_status
+      ignore_errors: True
+      changed_when: False
+      when:
+        - firewalld_status is succeeded
+        - iptables_service_status is failed
+    
+    - name: Get active zone name for zabbix-agent service, IF ignored - there is no firewalld
+      shell: firewall-cmd --get-active-zone | head -n1
+      register: zone_name
+      ignore_errors: True
+      changed_when: False
+      when:
+        - firewalld_status is succeeded
+        - iptables_service_status is failed
+        - zone_status is succeeded
+    
+    - fail:
+        msg: "There are no any active zone here!"
+      when:
+        - zone_status is failed
+    
+      # На самом деле, может и стоит активировать какую-то зону, но, возможно, это не задача этого сценария.
+    
+    - name: Enable firewalld service
+      firewalld:
+        zone={{ zone_name.stdout }}
+        permanent=true
+        state=enabled
+        service=zabbix-agent
+        immediate=yes
+      when:
+        - firewalld_status is succeeded
+        - iptables_service_status is failed
+        - zone_status is succeeded
+
+    - name: Install pip
+      yum:
+        name: python-pip
+        state: present
+
+    - name: PIP install zabbix api
+      pip:
+        name: zabbix-api
+
+    - name: Create a new host or update an existing host's info
+      zabbix_host:
+        server_url: "{{ zabbix_server_url }}"
+        login_user: "{{ auth_username }}"
+        login_password: "{{ auth_password }}"
+        host_name: "{{ ansible_nodename }}"
+        visible_name: "{{ ansible_nodename }}"
+        #description: Host "{{ ansible_nodename }}" was added by Ansible
+        host_groups: "{{ list_of_zabbix_groups|default(['Linux servers'])}}"
+        #  - Linux servers
+        link_templates: "{{ zabbix_templates }}"
+        status: enabled
+        state: present
+        inventory_mode: disabled
+        #ipmi_authtype: 0 # Possible values are, 0 (none), 1 (MD2), 2 (MD5), 4 (straight), 5 (OEM), 6 (RMCP+), with -1 being the API default.
+        #ipmi_privilege: 2 # Possible values are 1 (callback), 2 (user), 3 (operator), 4 (admin), 5 (OEM), with 2 being the API default.
+        interfaces:
+          - type: 1 #type can also be agent, snmp, ipmi, or jmx instead of its numerical value.
+            main: 1
+            useip: 1
+            ip: "{{ agent_ip }}"
+            dns: "{{ ansible_nodename }}"
+            port: "{{ listen_port }}" # Group vars
+        proxy: "{{ zabbix_proxy_server|default(None) }}"
+      #delegate_to: "{{ local_host_to_delegaion }}" # Не забыть добавить хост в инвентори
+      when:
+        - zabbix_agent_service_status is succeeded
+      tags:
+        - config
+
+  handlers:
+    - name: reload zabbix-agent
+      service:
+        name: zabbix-agent
+        state: restarted
+        enabled: yes
