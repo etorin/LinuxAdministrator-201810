@@ -1,0 +1,287 @@
+---
+
+- hosts: bareos-dir
+  become: yes
+  user: vagrant
+  vars:
+    ansible_ip_address: 192.168.33.12
+    ansible_hostname: bareos-dir
+    mysql_root_password: passwd12345
+    #bacula_dir_password: passwd123456
+    #dir_name: 
+    #bacula_dir_port:
+    bconsole_password: passwd12345
+    #bacula_sd_port:
+    #bacula_sd_address:
+    sd_password: passwd12345
+    #pgsql_password: "{{ mysql_root_password }}"
+    #dir_fd_password: 
+    #dir_fd_name: 
+    #mail: 
+    fd_password: passwd12345
+
+  tasks:
+    - name: Install epel
+      yum: 
+        name: epel-release 
+        state: present
+
+    - name: Install necessary packejes
+      yum:
+        name: mariadb-server, bacula-director, bacula-storage, bacula-console, bacula-client
+        state: present
+
+    - name: Install the Python MySQL Support Libraries
+      yum: pkg=MySQL-python state=latest
+
+    - name: Start mysql server and enable it on reboot
+      service: name=mariadb state=started enabled=true
+
+    - name: Copy the root credentials as .my.cnf file
+      template: src=my.cnf.j2 dest=~/.my.cnf mode=0600
+
+    - name: Creating Tables and RedHatights
+      shell: "{{ item }}"
+      with_items:
+        - /usr/libexec/bacula/grant_mysql_privileges
+        - /usr/libexec/bacula/create_mysql_database -u root
+        - /usr/libexec/bacula/make_mysql_tables -u bacula
+      run_once: true
+
+    - name: Creating directoryes /bacula/backup /bacula/restore
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: bacula
+        group: bacula
+        mode: 0700
+      with_items:
+        - /bacula/backup 
+        - /bacula/restore
+        - /etc/bacula/conf.d
+
+#    - name: Create a new database for bacula with name 'bacula'
+#      mysql_db:
+#        name: bacula
+#        config_file: ~/.my.cnf
+#        #login_user: root 
+#        #login_password: "{{ mysql_root_password }}"
+#        encoding: utf8
+#        collation: utf8_bin
+#        state: present
+#      when: ansible_os_family == "RedHat"
+
+    - name: Give rights user for database bacula
+      mysql_user:
+        name: bacula
+        password: "{{ mysql_root_password }}"
+        #host_all: yes
+        priv: '*.*:ALL,GRANT'
+        state: present
+
+# Я рад бы сделать лучше, но увы, не знаю как... какой там файл менять нужно?
+    - name: Choose mysql instead PostgreSQL
+      shell: "{{ item }}"
+      with_items:
+        - echo 1 | alternatives --config libbaccats.so
+      run_once: true
+
+# Так, тут все сложнее чем в бареосе - все в одном конфиге. Джинджа нам в помощь, но уже не сегодня.
+    - name: Copy bacula dir config
+      template: 
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: bacula
+        group: bacula
+        mode: 0640
+        backup: yes
+      with_items:
+        - { src: /home/vagrant/bacula-dir.conf.jinja2, dest: /etc/bacula/bacula-dir.conf }
+        - { src: /home/vagrant/bconsole.conf.jinja2, dest: /etc/bacula/bconsole.conf  }
+        - { src: /home/vagrant/bacula-sd.conf.jinja2, dest: /etc/bacula/bacula-sd.conf  }
+        - { src: /home/vagrant/bacula-fd.conf.jinja2, dest: /etc/bacula/bacula-fd.conf  }
+        - { src: /home/vagrant/filesets.conf.jinja2, dest: /etc/bacula/conf.d/filesets.conf  }
+      notify: reload bacula-dir
+
+    - name: Start dir sd fd services and enable it on reboot
+      service: 
+        name: "{{ item }}" 
+        state: started 
+        enabled: true
+      with_items:
+        - bacula-dir
+        - bacula-sd
+        - bacula-fd
+
+    - name: Addition tools installation
+      yum: 
+        name: policycoreutils-python
+        state: installed
+      when: ansible_os_family == "RedHat"
+
+    - name: Add selinux bacula-policy
+      shell: "{{ item }}"
+      with_items:
+        - semanage permissive -a bacula_t
+      register: bacula_selinux
+
+    - name: Add bacula to FW
+      firewalld:
+        zone: public
+        service: bacula
+        permanent: yes
+        state: enabled
+
+  handlers:
+    - name: reload bacula-dir
+      service:
+        name: bacula-dir
+        state: restarted
+        enabled: yes
+
+#    - name: Install unzip & tar
+#      yum:
+#        name: unzip, tar
+#        state: present
+#
+#    - name: Check that the /usr/share/doc/bareos-dir-mysql-4.0.4/create.sql.gz exists
+#      stat:
+#        path: /usr/share/doc/bareos-dir-mysql-4.0.4/create.sql.gz
+#      register: stat_result
+#
+#    #- name: Extract /usr/share/doc/bareos-dir-mysql-4.0.4/create.sql.gz into /usr/share/doc/bareos-dir-mysql-4.0.4/
+#    #  unarchive:
+#    #    src: /usr/share/doc/bareos-dir-mysql-4.0.4/create.sql.gz
+#    #    dest: /usr/share/doc/bareos-dir-mysql-4.0.4/
+#    #    remote_src: yes
+#    #  when: 
+#    #    - ansible_os_family == "RedHat"
+#    #    - stat_result.stat.exists == True
+#
+#    - name: Check that the /usr/share/doc/bareos-dir-mysql-4.0.4/create.sql exists
+#      stat:
+#        path: /usr/share/doc/bareos-dir-mysql-4.0.4/create.sql
+#      register: stat_result
+#
+#    - name: Extract /usr/share/doc/bareos-dir-mysql-4.0.4/create.sql.gz by shell command
+#      shell: gunzip /usr/share/doc/bareos-dir-mysql-4.0.4/create.sql.gz
+#
+#    - name: Import file.sql similar to mysql -u <username> -p <password> < hostname.sql
+#      mysql_db:
+#        state: import
+#        name: zabbix
+#        target: /usr/share/doc/bareos-dir-mysql-4.0.4/create.sql
+#      when: ansible_os_family == "RedHat"
+#
+#    - name: Configure database for Zabbix server - user and host
+#      lineinfile: 
+#        dest: /etc/zabbix/zabbix_server.conf
+#        regexp: "{{ item.regexp }}"
+#        line: "{{ item.line }}"
+#      with_items:
+#        - { regexp: '^DBHost=', line: 'DBHost=localhost' }
+#        - { regexp: '^DBName=', line: 'DBName=zabbix' }
+#        - { regexp: '^DBUser=', line: 'DBUser=zabbix' }
+##        - { regexp: '^DBPassword=', line: 'DBPassword=' }
+#      when: ansible_os_family == "RedHat"
+#
+#    - name: Configure database for Zabbix server - pass
+#      lineinfile: 
+#        dest: /etc/zabbix/zabbix_server.conf
+#        regexp: '^DBPassword='
+#        line: 'DBPassword={{ mysql_root_password }}'
+#      when: ansible_os_family == "RedHat"
+#
+
+
+#
+#    - name: Check first policy was enabled
+#      shell: if [ $(getsebool -a | grep 'zabbix_run_sudo --> on'| wc -l) -eq 0 ]; then error; fi
+#      register: zabbix_run_sudo
+#      ignore_errors: True
+#      changed_when: False
+#
+#    - name: Check second policy was enabled
+#      shell: if [ $(getsebool -a | grep 'zabbix_can_network --> on'| wc -l) -eq 0 ]; then error; fi
+#      register: zabbix_can_network
+#      ignore_errors: True
+#      changed_when: False
+#
+#    - name: Notice! Selinux zabbix-policy was enabled
+#      debug:
+#        msg: "Selinux zabbix-policy was enabled"
+#      when:
+#        - zabbix_can_network is succeeded
+#        - zabbix_run_sudo is succeeded
+#
+#    - name: Addition tools installation
+#      yum: 
+#        name: policycoreutils-python
+#        state: installed
+#      when: ansible_os_family == "RedHat"
+#
+#    - name: Download zabbix_server_add.te
+#      get_url:
+#        url: https://support.zabbix.com/secure/attachment/53320/zabbix_server_add.te
+#        dest: /home/vagrant/zabbix_server_add.te
+#
+#    - name: Add selinux zabbix-policy
+#      shell: "{{ item }}"
+#      with_items:
+#        - checkmodule -M -m -o /home/vagrant/zabbix_server_add.mod /home/vagrant/zabbix_server_add.te
+#        - semodule_package -m /home/vagrant/zabbix_server_add.mod -o /home/vagrant/zabbix_server_add.pp
+#        - semodule -i /home/vagrant/zabbix_server_add.pp
+#      register: zabbix_selinux
+#
+#    - name: Start zabbix server and enable it on reboot
+#      service: 
+#        name: bareos-dir 
+#        state: started 
+#        enabled: true
+#      when: 
+#        - ansible_os_family == "RedHat"
+#        - zabbix_can_network is succeeded
+#        - zabbix_run_sudo is succeeded
+#        - zabbix_selinux is succeeded
+#
+#    - name: Configure httpd zabbix.conf - timezone
+#      lineinfile: 
+#        dest: /etc/httpd/conf.d/zabbix.conf
+#        regexp: '^php_value date.timezone'
+#        line: 'php_value date.timezone Europe/Moscow'
+#      when: ansible_os_family == "RedHat"
+#
+#    - name: Enable selinux zabbix-web policy
+#      shell: "{{ item }}"
+#      with_items:
+#        - setsebool -P httpd_can_connect_zabbix on
+#        - setsebool -P httpd_can_network_connect_db on
+#
+#    - name: Check first policy was enabled
+#      shell: if [ $(getsebool -a | grep 'httpd_can_connect_zabbix --> on'| wc -l) -eq 0 ]; then error; fi
+#      register: httpd_can_connect_zabbix
+#      ignore_errors: True
+#      changed_when: False
+#
+#    - name: Check second policy was enabled
+#      shell: if [ $(getsebool -a | grep 'httpd_can_network_connect_db --> on'| wc -l) -eq 0 ]; then error; fi
+#      register: httpd_can_network_connect_db
+#      ignore_errors: True
+#      changed_when: False
+#
+#    - name: Notice! Selinux zabbix-policy was enabled
+#      debug:
+#        msg: "Selinux zabbix-policy was enabled"
+#      when:
+#        - httpd_can_connect_zabbix is succeeded
+#        - httpd_can_network_connect_db is succeeded
+#
+#    - name: Start httpd server and enable it on reboot
+#      service: 
+#        name: httpd 
+#        state: started 
+#        enabled: true
+#      when: 
+#        - ansible_os_family == "RedHat"
+#        - httpd_can_connect_zabbix is succeeded
+#        - httpd_can_network_connect_db is succeeded

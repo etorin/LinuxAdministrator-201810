@@ -1,0 +1,78 @@
+Client {
+Name = {{ansible_hostname}}-fd
+Address = {{ansible_ip_address}}
+FDPort = 9102
+Catalog = MyCatalog
+Password = "{{fd_password}}"          # password for Remote FileDaemon
+File Retention = 30 days              # 30 days
+Job Retention = 6 months              # six months
+AutoPrune = yes                       # Prune expired Jobs/Files
+}
+
+Job {
+  Name = "BackupClientHostEtc-Full"
+  Client = {{ansible_hostname}}-fd
+  Pool = RemoteFile-Full
+  FileSet="etc-fileset"
+  Type = Backup
+  Level = Full
+  Schedule = "FastCycle-1h"
+  Storage = File
+  Messages = Standard
+  Priority = 10
+  Write Bootstrap = "/var/spool/bacula/%c.bsr"
+}
+
+Job {
+  Name = "BackupClientHostEtc-Inc"
+  Client = {{ansible_hostname}}-fd
+  Pool = RemoteFile-Inc
+  FileSet="etc-fileset"
+  Type = Backup
+  Level = Incremental
+  Schedule = "FastCycle-10m"
+  Storage = File
+  Messages = Standard
+  Priority = 10
+  Write Bootstrap = "/var/spool/bacula/%c.bsr"
+}
+
+Job {
+  Name = "BackupClientHostEtc-Diff"
+  Client = {{ansible_hostname}}-fd
+  Pool = RemoteFile-Diff
+  FileSet="etc-fileset"
+  Type = Backup
+  Level = Differential
+  Schedule = "FastCycle-30m"
+  Storage = File
+  Messages = Standard
+  Priority = 10
+  Write Bootstrap = "/var/spool/bacula/%c.bsr"
+}
+
+Schedule {
+  Name = "FastCycle-1h"
+  Run = Level=Full hourly at 0:00 # Level=Full Daily at 0:00 # Поменял день на час
+}
+
+Schedule {
+  Name = "FastCycle-10m"
+  Run = Level=Incremental hourly at 0:05
+  Run = Level=Incremental hourly at 0:15
+  Run = Level=Incremental hourly at 0:25
+  Run = Level=Incremental hourly at 0:35
+  Run = Level=Incremental hourly at 0:45
+  Run = Level=Incremental hourly at 0:55
+}
+
+Schedule {
+  Name = "FastCycle-30m"
+  Run = Level=Differential hourly at 0:08
+  Run = Level=Differential hourly at 0:38
+}
+
+#Настроить политику бэкапа директории /etc с клиента:
+#1) Полный бэкап - раз в день
+#2) Инкрементальный - каждые 10 минут
+#3) Дифференциальный - каждые 30 минут

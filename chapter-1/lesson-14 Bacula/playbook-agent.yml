@@ -1,0 +1,227 @@
+---
+
+- hosts: bareos-clients
+  become: yes
+  user: vagrant
+  vars:
+    ansible_ip_address: 192.168.33.13
+    bareos_dir_address: 192.168.33.12
+    ansible_hostname: bareos-client
+    fd_password: passwd12345
+
+  tasks:
+    - name: Install epel
+      yum: 
+        name: epel-release 
+        state: present
+
+    - name: Agent installation
+      yum: 
+        name: bacula-client
+        state: installed
+
+    - name: Add bacula to FW
+      firewalld:
+        zone: public
+        service: bacula-client
+        permanent: yes
+        state: enabled
+
+    - name: Copy bacula fd config
+      template: 
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: bacula
+        group: bacula
+        mode: 0640
+        backup: yes
+      with_items:
+        - { src: /home/vagrant/client-bacula-fd.conf.jinja2, dest: /etc/bacula/bacula-fd.conf  }
+      notify: reload bacula-fd
+
+    - name: replace line in /etc/ansible/ansible.cfg
+      lineinfile: 
+        dest: /etc/ansible/ansible.cfg 
+        regexp: '^(.*)host_key_checking(.*)$' 
+        line: 'host_key_checking = False'
+
+    - name: Create /home/vagrant/.ssh/config
+      lineinfile:
+        path: /home/vagrant/.ssh/config
+        line: "{{item}}"
+        create: yes
+      with_items:
+        - 'Host 192.168.33.*'
+        - '   StrictHostKeyChecking no'
+        - '   UserKnownHostsFile=/dev/null'
+
+    - name: Create /root/.ssh/config
+      lineinfile:
+        path: /root/.ssh/config
+        line: "{{item}}"
+        create: yes
+      with_items:
+        - 'Host 192.168.33.*'
+        - '   StrictHostKeyChecking no'
+        - '   UserKnownHostsFile=/dev/null'
+
+    - name: Copy pools.conf to DIRECTOR
+      template: 
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: bacula
+        group: bacula
+        mode: 0640
+        backup: yes
+      with_items:
+        - { src: /home/vagrant/pools.conf.jinja2, dest: /etc/bacula/conf.d/pools.conf }
+      delegate_to: bareos-dir-server
+
+    - name: Copy clients.conf to DIRECTOR
+      template: 
+        src: /home/vagrant/dir-clients.conf.jinja2
+        dest: /etc/bacula/conf.d/{{ ansible_hostname }}-fd.conf
+        owner: bacula
+        group: bacula
+        mode: 0640
+        backup: yes
+      delegate_to: bareos-dir-server
+
+    - name: reload bacula-dir remotely
+      service:
+        name: bacula-dir
+        state: restarted
+        enabled: yes
+      delegate_to: bareos-dir-server
+
+  handlers:
+    - name: reload bacula-fd
+      service:
+        name: bacula-fd
+        state: restarted
+        enabled: yes
+
+#    - name: Push CLIENT configuration file /etc/zabbix/zabbix_agentd.conf
+#      template: src='/home/vagrant/zabbix_agentd.conf.j2' dest='/etc/zabbix/zabbix_agentd.conf' mode=0644 owner=zabbix group=zabbix
+#      when:
+#        - zabbix_agent_service_status is failed
+#      notify: reload bareos-client
+#
+#    - name: Enable bareos-client service
+#      action: service name=bareos-client state=started enabled=yes
+#      when:
+#        - zabbix_agent_service_status is failed
+#
+#    - name: Check status of bareos-client service AGAUIN !!!
+#      shell: if [ $(systemctl status bareos-client | grep running| wc -l) -eq 0 ]; then error; fi
+#      register: zabbix_agent_service_status
+#      ignore_errors: True
+#      changed_when: False
+#    
+#    - name: Check of firewalld service bareos-client, IF ignored - there are service bareos-client
+#      shell: if [ $(firewall-cmd --get-services | grep bareos-client| wc -l) -ne 0 ]; then error; fi
+#      register: result
+#      ignore_errors: True
+#      changed_when: False
+#      when:
+#        - firewalld_status is succeeded
+#        - iptables_service_status is failed
+#    
+#    - name: Create new service bareos-client - skiped IF already exist(1)
+#      command: firewall-cmd --permanent --new-service=bareos-client
+#      when:
+#        - result is succeeded
+#        - firewalld_status is succeeded
+#        - iptables_service_status is failed
+#    
+#    - name: Create new service bareos-client - skiped IF already exist(2)
+#      command: firewall-cmd --service=bareos-client --add-port={{ listen_port }}/tcp --permanent
+#      when:
+#        - result is succeeded
+#        - firewalld_status is succeeded
+#        - iptables_service_status is failed
+#    
+#    - name: Create new service bareos-client - skiped IF already exist(3)
+#      command: firewall-cmd --reload
+#      when:
+#        - result is succeeded
+#        - firewalld_status is succeeded
+#        - iptables_service_status is failed
+#    
+#    - name: Check if some zone active, IF ignored - there is no firewalld
+#      shell: if [ $(firewall-cmd --get-active-zone | head -n1| wc -l) -ne 1 ]; then error; fi
+#      register: zone_status
+#      ignore_errors: True
+#      changed_when: False
+#      when:
+#        - firewalld_status is succeeded
+#        - iptables_service_status is failed
+#    
+#    - name: Get active zone name for bareos-client service, IF ignored - there is no firewalld
+#      shell: firewall-cmd --get-active-zone | head -n1
+#      register: zone_name
+#      ignore_errors: True
+#      changed_when: False
+#      when:
+#        - firewalld_status is succeeded
+#        - iptables_service_status is failed
+#        - zone_status is succeeded
+#    
+#    - fail:
+#        msg: "There are no any active zone here!"
+#      when:
+#        - zone_status is failed
+#    
+#      # На самом деле, может и стоит активировать какую-то зону, но, возможно, это не задача этого сценария.
+#    
+#    - name: Enable firewalld service
+#      firewalld:
+#        zone={{ zone_name.stdout }}
+#        permanent=true
+#        state=enabled
+#        service=bareos-client
+#        immediate=yes
+#      when:
+#        - firewalld_status is succeeded
+#        - iptables_service_status is failed
+#        - zone_status is succeeded
+#
+#    - name: Install pip
+#      yum:
+#        name: python-pip
+#        state: present
+#
+#    - name: PIP install zabbix api
+#      pip:
+#        name: zabbix-api
+#
+#    - name: Create a new host or update an existing host's info
+#      zabbix_host:
+#        server_url: "{{ zabbix_server_url }}"
+#        login_user: "{{ auth_username }}"
+#        login_password: "{{ auth_password }}"
+#        host_name: "{{ ansible_nodename }}"
+#        visible_name: "{{ ansible_nodename }}"
+#        #description: Host "{{ ansible_nodename }}" was added by Ansible
+#        host_groups: "{{ list_of_zabbix_groups|default(['Linux servers'])}}"
+#        #  - Linux servers
+#        link_templates: "{{ zabbix_templates }}"
+#        status: enabled
+#        state: present
+#        inventory_mode: disabled
+#        #ipmi_authtype: 0 # Possible values are, 0 (none), 1 (MD2), 2 (MD5), 4 (straight), 5 (OEM), 6 (RMCP+), with -1 being the API default.
+#        #ipmi_privilege: 2 # Possible values are 1 (callback), 2 (user), 3 (operator), 4 (admin), 5 (OEM), with 2 being the API default.
+#        interfaces:
+#          - type: 1 #type can also be agent, snmp, ipmi, or jmx instead of its numerical value.
+#            main: 1
+#            useip: 1
+#            ip: "{{ agent_ip }}"
+#            dns: "{{ ansible_nodename }}"
+#            port: "{{ listen_port }}" # Group vars
+#        proxy: "{{ zabbix_proxy_server|default(None) }}"
+#      #delegate_to: "{{ local_host_to_delegaion }}" # Не забыть добавить хост в инвентори
+#      when:
+#        - zabbix_agent_service_status is succeeded
+#      tags:
+#        - config
+#

@@ -1,0 +1,13 @@
+FileSet {
+Name = "etc-fileset"
+Include {
+Options {
+signature = MD5
+compression = GZIP
+}
+File = /etc
+}
+Exclude {
+File = /etc/ansible/
+}
+}

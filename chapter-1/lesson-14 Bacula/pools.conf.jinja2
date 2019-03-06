@@ -1,0 +1,32 @@
+Pool {
+Name = RemoteFile-Full
+Pool Type = Backup
+Label Format = "Full-${Client}_${Level}_${Pool}.${Year}-${Month:p/2/0/r}-${Day:p/2/0/r}-${Hour:p/2/0/r}-${Minute:p/2/0/r}"
+Recycle = yes                       # Bacula can automatically recycle Volumes
+AutoPrune = yes                     # Prune expired volumes
+Volume Retention = 10 days          # 
+Maximum Volume Bytes = 1G          # Limit Volume size to something reasonable
+Maximum Volumes = 100               # Limit number of Volumes in Pool
+}
+
+Pool {
+Name = RemoteFile-Inc
+Pool Type = Backup
+Label Format = "Inc-${Client}_${Level}_${Pool}.${Year}-${Month:p/2/0/r}-${Day:p/2/0/r}-${Hour:p/2/0/r}-${Minute:p/2/0/r}"
+Recycle = yes                       # Bacula can automatically recycle Volumes
+AutoPrune = yes                     # Prune expired volumes
+Volume Retention = 10 days          # 
+Maximum Volume Bytes = 1G          # Limit Volume size to something reasonable
+Maximum Volumes = 100               # Limit number of Volumes in Pool
+}
+
+Pool {
+Name = RemoteFile-Diff
+Pool Type = Backup
+Label Format = "Diff-${Client}_${Level}_${Pool}.${Year}-${Month:p/2/0/r}-${Day:p/2/0/r}-${Hour:p/2/0/r}-${Minute:p/2/0/r}"
+Recycle = yes                       # Bacula can automatically recycle Volumes
+AutoPrune = yes                     # Prune expired volumes
+Volume Retention = 10 days          # 
+Maximum Volume Bytes = 1G          # Limit Volume size to something reasonable
+Maximum Volumes = 100               # Limit number of Volumes in Pool
+}
